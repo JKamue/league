@@ -1,0 +1,27 @@
+{
+  "name": "cowbuilders-hq",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "api": "node server.mjs",
+    "build": "tsc -b && vite build",
+    "start": "node server.mjs",
+    "test": "node --experimental-strip-types --test \"tests/*.test.mjs\" \"tests/*.test.ts\""
+  },
+  "dependencies": {
+    "@fontsource/barlow": "^5.2.5",
+    "@fontsource/cinzel": "^5.2.5",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.2",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.5"
+  }
+}

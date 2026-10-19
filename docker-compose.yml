@@ -1,0 +1,15 @@
+# Local testing and a starting point for the server: docker compose up -d --build → http://localhost:8080
+services:
+  cowbuilders:
+    build: .
+    image: ghcr.io/jkamue/league:latest
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8080}:3000"
+    volumes:
+      - cowbuilders-data:/data
+    labels:
+      - com.centurylinklabs.watchtower.scope=league
+
+volumes:
+  cowbuilders-data:

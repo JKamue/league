@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react'
 import { api } from '../api'
-import type { Player, Session, Signup } from '../api'
+import type { Absence, Player, Session, Signup } from '../api'
+import { awayOn, describeAbsence } from '../absence'
 import { LANES, MODE_INFO, MODES, ROLE_LABEL, allReadiness, solveLineup } from '../lol'
 import type { Mode, Role } from '../lol'
-import { HOUR, formatHour, formatSlot, icsFor, relative } from '../time'
+import { HOUR, formatHour, formatSlot, gamingDayOf, icsFor, relative } from '../time'
 import { candidatesOf } from '../useSchedule'
 import { Avatar, LaneSummary, ModePicker, Modal, RoleIcon, RolePicker } from './ui'
 
 const MAX = 5
 const STATE_LABEL = { full: 'Full', ready: 'Ready', close: 'Almost', no: 'Not yet' }
 
-export function SlotDetail({ slot, signups, sessions, players, me, askIdentity, onClose, onChanged }: {
-  slot: number; signups: Signup[]; sessions: Session[]; players: Player[]; me: Player | null
+export function SlotDetail({ slot, signups, sessions, players, me, absences, askIdentity, onClose, onChanged }: {
+  slot: number; signups: Signup[]; sessions: Session[]; players: Player[]; me: Player | null; absences: Absence[]
   askIdentity: () => void; onClose: () => void; onChanged: () => Promise<void>
 }) {
   const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players])
@@ -31,6 +32,8 @@ export function SlotDetail({ slot, signups, sessions, players, me, askIdentity, 
   const laneOf = new Map(Object.entries(lineup.assignment).map(([lane, playerId]) => [playerId, lane as Role]))
   const isFull = signups.length >= MAX && !mine
   const past = slot + HOUR < Date.now()
+  const away = awayOn(absences, gamingDayOf(slot))
+  const meAway = me ? away.some((absence) => absence.playerId === me.id) : false
 
   const run = async (action: () => Promise<unknown>, done?: string) => {
     setBusy(true); setStatus('')
@@ -91,6 +94,16 @@ export function SlotDetail({ slot, signups, sessions, players, me, askIdentity, 
         </div>
       )}
 
+      {away.length > 0 && (
+        <div className="away-strip">
+          <span className="away-title">Away that day</span>
+          {away.map((absence) => {
+            const player = playerById.get(absence.playerId)
+            return player && <span key={absence.id} className="away-chip"><span className="away-avatar"><Avatar player={player} size={24} /></span>{player.name} <span className="muted">{describeAbsence(absence)}</span></span>
+          })}
+        </div>
+      )}
+
       <div className="slot-grid">
         <section>
           <h3>Lobby</h3>
@@ -143,6 +156,7 @@ export function SlotDetail({ slot, signups, sessions, players, me, askIdentity, 
       {!past && (
         <section className="my-signup hextech-panel">
           <h3>{mine ? 'Your signup' : isFull ? 'Lobby is full' : me ? `Join as ${me.name}` : 'Join this slot'}</h3>
+          {meAway && <p className="form-error">Heads up: you marked yourself away on this day.</p>}
           {!me && <p><button type="button" className="button" onClick={askIdentity}>Tell us who you are first</button></p>}
           {me && !isFull && (
             <>

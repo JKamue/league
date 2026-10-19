@@ -65,6 +65,18 @@ test('sessions can be locked and cancelled; bad slots are rejected', async () =>
   assert.equal((await call('DELETE', `/api/sessions/${session.body.id}`)).status, 200)
 })
 
+test('absences are validated, listed by end date and removable', async () => {
+  const playerId = (await call('POST', '/api/players', { name: 'Traveller', roles: ['fill'] })).body.id
+  assert.equal((await call('POST', '/api/absences', { playerId, start: '2026-02-30', end: '2026-03-02' })).status, 400)
+  assert.equal((await call('POST', '/api/absences', { playerId, start: '2026-03-05', end: '2026-03-01' })).status, 400)
+  const created = await call('POST', '/api/absences', { playerId, start: '2026-08-01', end: '2026-08-14', kind: 'vacation', note: 'Mallorca' })
+  assert.equal(created.status, 201)
+  assert.equal(created.body.end, '2026-08-14')
+  assert.equal((await call('GET', '/api/absences?since=2026-08-14')).body.length, 1)
+  assert.equal((await call('GET', '/api/absences?since=2026-08-15')).body.length, 0)
+  assert.equal((await call('DELETE', `/api/absences/${created.body.id}`)).status, 200)
+})
+
 test('the frontend fallback answers unknown paths', async () => {
   const response = await fetch(`${base}/schedule`)
   assert.ok([200, 404].includes(response.status))

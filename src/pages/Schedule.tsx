@@ -7,7 +7,9 @@ import type { Mode, Readiness } from '../lol'
 import { ALL_HOURS, DAY, EVENING_HOURS, HOUR, addDays, formatDay, formatRange, gamingDayOf, isSameDay, slotFor, startOfWeek, weekDays } from '../time'
 import { candidatesOf, useSchedule } from '../useSchedule'
 import { SlotDetail } from '../components/SlotDetail'
-import { Avatar, Crest } from '../components/ui'
+import { ABSENCE_KINDS, awayOn, describeAbsence, isAway } from '../absence'
+import { AbsenceManager } from '../components/AbsenceManager'
+import { Avatar, Crest, Modal } from '../components/ui'
 
 const HOURS_KEY = 'cowbuilders:hours'
 // Which badge a cell shows: the most demanding mode the group can actually play.
@@ -23,7 +25,7 @@ type Paint = { action: 'add' | 'remove'; slots: Set<number> }
 // Deep link: /schedule?slot=<ms> opens that slot, so Discord messages can point straight at a lobby.
 const linkedSlot = () => { const slot = Number(new URLSearchParams(window.location.search).get('slot')); return Number.isSafeInteger(slot) && slot > 0 ? slot : null }
 
-export function SchedulePage({ players, me, askIdentity, refreshPlayers }: AppContext) {
+export function SchedulePage({ players, me, askIdentity, refreshPlayers, absences, refreshAbsences }: AppContext) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(linkedSlot() ? gamingDayOf(linkedSlot()!) : new Date()))
   const [showAll, setShowAll] = useState(() => { try { return localStorage.getItem(HOURS_KEY) === 'all' } catch { return false } })
   const [paintMode, setPaintMode] = useState(false)
@@ -35,6 +37,7 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers }: AppCo
   }
   const [filter, setFilter] = useState<Mode | 'any'>('any')
   const [toast, setToast] = useState('')
+  const [awayOpen, setAwayOpen] = useState(false)
   const paintRef = useRef<Paint | null>(null)
 
   const days = weekDays(weekStart)
@@ -76,11 +79,15 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers }: AppCo
       const current = paintRef.current
       paintRef.current = null
       if (!current || !me) return
-      const slots = [...current.slots]
+      // You can't be available on days you marked yourself away, so painting skips them.
+      const slots = [...current.slots].filter((slot) => current.action === 'remove' || !isAway(absences, me.id, gamingDayOf(slot)))
+      const skipped = current.slots.size - slots.length
+      const skippedNote = skipped ? ` Skipped ${skipped} on days you're away.` : ''
       try {
+        if (slots.length === 0) { setToast(`You're marked away on those days.`); return }
         if (current.action === 'add') {
           const result = await api.join({ playerId: me.id, slots })
-          setToast(result.full.length ? `Joined ${result.saved} slot(s); ${result.full.length} already full.` : `Joined ${result.saved} slot${result.saved === 1 ? '' : 's'}.`)
+          setToast((result.full.length ? `Joined ${result.saved} slot(s); ${result.full.length} already full.` : `Joined ${result.saved} slot${result.saved === 1 ? '' : 's'}.`) + skippedNote)
         } else {
           const result = await api.leave(me.id, slots)
           setToast(`Left ${result.removed} slot${result.removed === 1 ? '' : 's'}.`)
@@ -92,7 +99,7 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers }: AppCo
     window.addEventListener('pointerup', finish)
     window.addEventListener('pointercancel', finish)
     return () => { window.removeEventListener('pointerup', finish); window.removeEventListener('pointercancel', finish) }
-  }, [me, reload, refreshPlayers])
+  }, [me, reload, refreshPlayers, absences])
 
   const copyWeek = async () => {
     if (!me) return askIdentity()
@@ -132,6 +139,7 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers }: AppCo
         <div className="toolbar-actions">
           <button type="button" className={`button small ${paintMode ? 'gold' : 'ghost'}`} aria-pressed={paintMode} onClick={() => setPaintMode(!paintMode)}>🖌 Paint availability</button>
           <button type="button" className="button small ghost" onClick={() => void copyWeek()}>⟳ Copy my last week</button>
+          <button type="button" className="button small ghost" onClick={() => (me ? setAwayOpen(true) : askIdentity())}>🏖 I'm away</button>
           <button type="button" className="button small ghost" onClick={() => setShowAll(!showAll)}>{showAll ? 'Evenings only' : 'All day'}</button>
           <select value={filter} onChange={(event) => setFilter(event.target.value as Mode | 'any')} aria-label="Highlight mode">
             <option value="any">Highlight: any mode</option>
@@ -146,7 +154,17 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers }: AppCo
         <div className={`calendar ${paintMode ? 'painting' : ''}`} style={{ gridTemplateColumns: `4.2rem repeat(7, minmax(7.5rem, 1fr))` }} onPointerMove={movePaint}>
           <div className="corner"><Crest size={30} /></div>
           {days.map((day) => (
-            <div key={day.toISOString()} className={`day-head ${isSameDay(day, new Date()) ? 'today' : ''}`}>{formatDay(day)}</div>
+            <div key={day.toISOString()} className={`day-head ${isSameDay(day, new Date()) ? 'today' : ''}`}>
+              {formatDay(day)}
+              {awayOn(absences, day).length > 0 && (
+                <span className="day-away">
+                  {awayOn(absences, day).map((absence) => {
+                    const player = playerById.get(absence.playerId)
+                    return player && <span key={absence.id} className="away-tag" title={`${player.name}: ${describeAbsence(absence)}`}>{ABSENCE_KINDS[absence.kind].emoji} <s>{player.name}</s></span>
+                  })}
+                </span>
+              )}
+            </div>
           ))}
           {hours.map(renderRow)}
         </div>
@@ -155,15 +173,20 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers }: AppCo
       <div className="legend">
         <span><i className="heat heat-1" />1</span><span><i className="heat heat-2" />2</span><span><i className="heat heat-3" />3</span>
         <span><i className="heat heat-4" />4</span><span><i className="heat heat-5" />5 full</span>
-        <span className="legend-mine">your slot</span><span>🔒 locked session</span>
+        <span className="legend-mine">your slot</span><span><i className="legend-away" />you are away</span><span>🔒 locked session</span>
         <span className="muted">Times in your local time zone ({Intl.DateTimeFormat().resolvedOptions().timeZone}). Night hours count to the evening before.</span>
       </div>
 
       {openSlot !== null && (
         <SlotDetail
-          slot={openSlot} signups={openSignups} sessions={sessionsBySlot.get(openSlot) ?? []} players={players} me={me}
+          slot={openSlot} signups={openSignups} sessions={sessionsBySlot.get(openSlot) ?? []} players={players} me={me} absences={absences}
           askIdentity={askIdentity} onClose={() => setOpenSlot(null)} onChanged={async () => { await reload(); void refreshPlayers() }}
         />
+      )}
+      {awayOpen && me && (
+        <Modal title="When are you away?" onClose={() => setAwayOpen(false)}>
+          <AbsenceManager player={me} absences={absences} onChanged={refreshAbsences} />
+        </Modal>
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
@@ -181,8 +204,9 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers }: AppCo
           const badge = filter === 'any' ? bestBadge(readiness) : readiness.find((item) => item.mode === filter && (item.state === 'full' || item.state === 'ready')) ?? null
           const sessions = sessionsBySlot.get(slot) ?? []
           const mine = me ? signups.some((signup) => signup.playerId === me.id) : false
+          const meAway = me ? isAway(absences, me.id, day) : false
           const painted = paint?.slots.has(slot)
-          const classes = ['cell', `heat-${signups.length}`, slot + HOUR < now ? 'past' : '', slot <= now && now < slot + HOUR ? 'now' : '', mine ? 'mine' : '',
+          const classes = ['cell', `heat-${signups.length}`, slot + HOUR < now ? 'past' : '', slot <= now && now < slot + HOUR ? 'now' : '', mine ? 'mine' : '', meAway ? 'away-me' : '',
             painted ? `paint-${paint!.action}` : '', badge ? `badge-${badge.state}` : '', filter !== 'any' && !badge && signups.length ? 'dim' : '']
           return (
             <button

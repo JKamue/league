@@ -3,10 +3,12 @@ import type { AppContext } from '../App'
 import { api } from '../api'
 import type { Activity } from '../api'
 import { GALLERY, MODE_INFO, allReadiness, splash } from '../lol'
-import { DAY, HOUR, currentSlot, formatSlot, relative } from '../time'
+import { DAY, HOUR, addDays, currentSlot, formatSlot, relative } from '../time'
+import { ABSENCE_KINDS, dayKey, formatDayKey } from '../absence'
 import { candidatesOf, useSchedule } from '../useSchedule'
 import { SlotDetail } from '../components/SlotDetail'
-import { Avatar, Crest } from '../components/ui'
+import { Avatar, Crest, Modal } from '../components/ui'
+import { AbsenceManager } from '../components/AbsenceManager'
 
 const HERO_ROTATION = GALLERY.slice(0, 8)
 const timeAgo = (sqlUtc: string) => {
@@ -17,10 +19,11 @@ const timeAgo = (sqlUtc: string) => {
   return `${Math.round(minutes / 1440)} d ago`
 }
 
-export function Home({ players, me, askIdentity, navigate, refreshPlayers }: AppContext) {
+export function Home({ players, me, askIdentity, navigate, refreshPlayers, absences, refreshAbsences }: AppContext) {
   const [heroIndex, setHeroIndex] = useState(() => Math.floor(Math.random() * HERO_ROTATION.length))
   const [activity, setActivity] = useState<Activity[]>([])
   const [openSlot, setOpenSlot] = useState<number | null>(null)
+  const [awayOpen, setAwayOpen] = useState(false)
   const [from] = useState(() => currentSlot())
   const { schedule, bySlot, reload } = useSchedule(from, from + 14 * DAY)
   const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players])
@@ -38,6 +41,9 @@ export function Home({ players, me, askIdentity, navigate, refreshPlayers }: App
   const upcomingSessions = schedule.sessions.filter((session) => session.slot + 2 * HOUR > Date.now()).slice(0, 5)
   const legends = [...players].sort((a, b) => (b.totalSignups ?? 0) - (a.totalSignups ?? 0)).slice(0, 3)
   const hero = HERO_ROTATION[heroIndex]
+  const today = dayKey(new Date())
+  const soon = dayKey(addDays(new Date(), 30))
+  const outOfOffice = absences.filter((absence) => absence.end >= today && absence.start <= soon)
 
   return (
     <div className="home">
@@ -120,6 +126,29 @@ export function Home({ players, me, askIdentity, navigate, refreshPlayers }: App
         </section>
 
         <section className="hextech-panel">
+          <div className="panel-head">
+            <h2>Out of office</h2>
+            <button type="button" className="button small ghost" onClick={() => (me ? setAwayOpen(true) : askIdentity())}>🏖 I'm away</button>
+          </div>
+          {outOfOffice.length === 0 && <p className="muted">Everyone is around for the next 30 days. No excuses.</p>}
+          <ul className="away-list">
+            {outOfOffice.map((absence) => {
+              const player = playerById.get(absence.playerId)
+              const now = absence.start <= today
+              return player && (
+                <li key={absence.id} className={now ? 'now' : ''}>
+                  <span className="away-avatar"><Avatar player={player} size={32} /></span>
+                  <span>
+                    <strong>{player.name}</strong> <span className="away-kind">{ABSENCE_KINDS[absence.kind].emoji} {ABSENCE_KINDS[absence.kind].label}</span><br />
+                    <span className="muted">{now ? `back after ${formatDayKey(absence.end)}` : `${formatDayKey(absence.start)} – ${formatDayKey(absence.end)}`}{absence.note ? ` · ${absence.note}` : ''}</span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+
+        <section className="hextech-panel">
           <h2>Hall of fame</h2>
           {legends.length === 0 && <p className="muted">No legends yet.</p>}
           <ol className="podium">
@@ -158,10 +187,15 @@ export function Home({ players, me, askIdentity, navigate, refreshPlayers }: App
         </ol>
       </section>
 
+      {awayOpen && me && (
+        <Modal title="When are you away?" onClose={() => setAwayOpen(false)}>
+          <AbsenceManager player={me} absences={absences} onChanged={refreshAbsences} />
+        </Modal>
+      )}
       {openSlot !== null && (
         <SlotDetail
           slot={openSlot} signups={bySlot.get(openSlot) ?? []} sessions={schedule.sessions.filter((session) => session.slot === openSlot)}
-          players={players} me={me} askIdentity={askIdentity} onClose={() => setOpenSlot(null)}
+          players={players} me={me} absences={absences} askIdentity={askIdentity} onClose={() => setOpenSlot(null)}
           onChanged={async () => { await reload(); void refreshPlayers() }}
         />
       )}

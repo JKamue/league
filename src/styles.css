@@ -298,3 +298,32 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--blue-
   .hero-slide, .painting, .member-card { transition: none; }
   .hero-content .crest { animation: none; }
 }
+
+/* ---------- absences ---------- */
+.away-avatar { position: relative; display: inline-flex; filter: grayscale(0.6); }
+.away-avatar .avatar { border-color: var(--red); }
+.away-avatar::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: 3px; background: var(--red); transform: rotate(-45deg); box-shadow: 0 0 3px #000; }
+.day-away { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 0.3rem; }
+.away-tag { font-family: var(--body); text-transform: none; letter-spacing: 0; font-size: 0.72rem; font-weight: 600; padding: 0 0.4rem; border-radius: 999px;
+  background: rgba(232, 64, 87, 0.22); border: 1px solid var(--red); color: #ffd8de; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.away-tag s { text-decoration-color: rgba(255, 216, 222, 0.75); text-decoration-thickness: 1px; }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.cell.away-me { background-image: repeating-linear-gradient(-45deg, rgba(232, 64, 87, 0.12) 0 6px, transparent 6px 12px); }
+.legend-away { display: inline-block; width: 1rem; height: 1rem; border: 1px solid var(--line); background: repeating-linear-gradient(-45deg, rgba(232, 64, 87, 0.5) 0 3px, transparent 3px 6px); }
+.away-strip { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; padding: 0.5rem 0.7rem; margin-top: 0.5rem; border: 1px dashed #7a2533; background: rgba(232, 64, 87, 0.06); }
+.away-title { font-family: var(--display); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.08em; color: #ff8b9a; }
+.away-chip { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+.away-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.away-list li { display: flex; gap: 0.7rem; align-items: center; opacity: 0.75; }
+.away-list li.now { opacity: 1; }
+.away-kind { font-size: 0.8rem; color: #ff8b9a; }
+.member-card.away .member-art { filter: grayscale(1) brightness(0.6); }
+.away-ribbon { position: absolute; top: 0.8rem; left: 0; right: 0; z-index: 2; text-align: center; padding: 0.3rem 0.5rem; font-size: 0.8rem; font-weight: 600;
+  background: rgba(122, 37, 51, 0.9); color: #ffd8de; border-block: 1px solid #e84057; text-shadow: 0 1px 2px #000; }
+.upcoming-away { margin: 0; font-size: 0.8rem; color: #ff8b9a; }
+.member-actions { display: flex; gap: 0.5rem; }
+.absence-manager { display: grid; gap: 1rem; }
+.absence-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.absence-list li { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem; border: 1px solid var(--line); }
+.form-row.even { grid-template-columns: 1fr 1fr; }
+input[type='date'] { color-scheme: dark; }

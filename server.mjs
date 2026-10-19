@@ -13,6 +13,7 @@ const db = new DatabaseSync(join(dataDir, 'cowbuilders.sqlite'))
 const ROLES = ['top', 'jungle', 'mid', 'bot', 'support', 'fill']
 const MODES = ['flex', 'aram', 'normal', 'clash', 'arena', 'duo']
 const MAX_PER_SLOT = 5
+const ABSENCE_KINDS = ['vacation', 'exams', 'work', 'sick', 'travel', 'other']
 const HOUR = 3_600_000
 const SLOT_GRANULARITY = 900_000 // 15 min, so half-hour time zones still line up
 
@@ -37,9 +38,16 @@ db.exec(`PRAGMA journal_mode = WAL;
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
   CREATE INDEX IF NOT EXISTS sessions_slot ON sessions(slot);
+  CREATE TABLE IF NOT EXISTS absences (
+    id INTEGER PRIMARY KEY, player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    start_day TEXT NOT NULL, end_day TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'vacation', note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS absences_end ON absences(end_day);
 `)
 // Schema version for future additive migrations (check user_version, then ALTER TABLE).
-if (db.prepare('PRAGMA user_version').get().user_version === 0) db.exec('PRAGMA user_version = 1')
+// v2: absences table (created above by CREATE TABLE IF NOT EXISTS, nothing to alter).
+if (db.prepare('PRAGMA user_version').get().user_version < 2) db.exec('PRAGMA user_version = 2')
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status }
@@ -99,6 +107,15 @@ const listSignups = (from, to) => db.prepare(`SELECT slot, player_id AS playerId
   FROM signups WHERE slot >= ? AND slot < ? ORDER BY slot, created_at`).all(from, to).map(playerRow)
 const listSessions = (from, to) => db.prepare(`SELECT id, slot, mode, title, created_by AS createdBy, created_at AS createdAt
   FROM sessions WHERE slot >= ? AND slot < ? ORDER BY slot`).all(from, to)
+
+// Absences use the viewer's calendar days ("YYYY-MM-DD"), inclusive on both ends.
+const dayValue = (value, field) => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))
+    || new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value) fail(`${field} must be a date like 2026-12-24.`)
+  return value
+}
+const ABSENCE_COLUMNS = 'id, player_id AS playerId, start_day AS start, end_day AS end, kind, note, created_at AS createdAt'
+const listAbsences = (since) => db.prepare(`SELECT ${ABSENCE_COLUMNS} FROM absences WHERE end_day >= ? ORDER BY start_day, id`).all(since)
 
 const playerFields = (payload, partial) => {
   const fields = {}
@@ -196,6 +213,26 @@ const routes = [
   }],
   ['DELETE', /^\/api\/sessions\/(\d+)$/, (_req, [id]) => {
     if (db.prepare('DELETE FROM sessions WHERE id = ?').run(Number(id)).changes === 0) fail('Session not found.', 404)
+    return [200, { deleted: true }]
+  }],
+  ['GET', /^\/api\/absences$/, (_req, _params, url) => {
+    const since = url.searchParams.get('since')
+    return [200, listAbsences(since ? dayValue(since, 'since') : '0000-00-00')]
+  }],
+  ['POST', /^\/api\/absences$/, async (req) => {
+    const payload = await readBody(req)
+    const player = requirePlayer(payload.playerId)
+    const start = dayValue(payload.start, 'Start')
+    const end = dayValue(payload.end, 'End')
+    if (end < start) fail('The end date is before the start date.')
+    if (Date.parse(end) - Date.parse(start) > 366 * 24 * HOUR) fail('Absences can be at most a year long.')
+    const kind = pickList([payload.kind ?? 'vacation'], ABSENCE_KINDS, 'kind', { required: true })[0]
+    const note = text(payload.note, 'Note', 80)
+    const result = db.prepare('INSERT INTO absences(player_id, start_day, end_day, kind, note) VALUES (?, ?, ?, ?, ?)').run(player.id, start, end, kind, note)
+    return [201, db.prepare(`SELECT ${ABSENCE_COLUMNS} FROM absences WHERE id = ?`).get(Number(result.lastInsertRowid))]
+  }],
+  ['DELETE', /^\/api\/absences\/(\d+)$/, (_req, [id]) => {
+    if (db.prepare('DELETE FROM absences WHERE id = ?').run(Number(id)).changes === 0) fail('Absence not found.', 404)
     return [200, { deleted: true }]
   }],
   ['GET', /^\/api\/activity$/, () => [200, db.prepare(`SELECT * FROM (

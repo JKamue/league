@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
-import type { Player } from './api'
+import type { Absence, Player } from './api'
+import { currentAbsence, dayKey } from './absence'
+import { addDays } from './time'
 import { Avatar, Crest, Modal } from './components/ui'
 import { PlayerForm } from './components/PlayerForm'
 import { Home } from './pages/Home'
@@ -17,6 +19,8 @@ export type AppContext = {
   players: Player[]
   me: Player | null
   refreshPlayers: () => Promise<void>
+  absences: Absence[]
+  refreshAbsences: () => Promise<void>
   askIdentity: () => void
   navigate: (page: Page) => void
 }
@@ -27,12 +31,22 @@ export default function App() {
   const [meId, setMeId] = useState<number | null>(readMe)
   const [identityOpen, setIdentityOpen] = useState(false)
   const [error, setError] = useState('')
+  const [absences, setAbsences] = useState<Absence[]>([])
   const me = players.find((player) => player.id === meId) ?? null
 
   const refreshPlayers = useCallback(async () => {
     try { setPlayers(await api.players()); setError('') } catch (reason) { setError(reason instanceof Error ? reason.message : 'Server unreachable.') }
   }, [])
   useEffect(() => { void refreshPlayers() }, [refreshPlayers])
+  // A year back is plenty for browsing old weeks; the list stays tiny.
+  const refreshAbsences = useCallback(async () => {
+    try { setAbsences(await api.absences(dayKey(addDays(new Date(), -365)))) } catch { /* the players error banner already covers an unreachable server */ }
+  }, [])
+  useEffect(() => {
+    void refreshAbsences()
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refreshAbsences() }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [refreshAbsences])
   useEffect(() => {
     const onPop = () => setPage(pageFromPath(window.location.pathname))
     window.addEventListener('popstate', onPop)
@@ -49,7 +63,7 @@ export default function App() {
     try { if (id) localStorage.setItem(ME_KEY, String(id)); else localStorage.removeItem(ME_KEY) } catch { /* private mode: identity just isn't remembered */ }
     setIdentityOpen(false)
   }
-  const context: AppContext = { players, me, refreshPlayers, askIdentity: () => setIdentityOpen(true), navigate }
+  const context: AppContext = { players, me, refreshPlayers, absences, refreshAbsences, askIdentity: () => setIdentityOpen(true), navigate }
 
   return (
     <div className="app">
@@ -66,7 +80,7 @@ export default function App() {
           ))}
         </nav>
         <button type="button" className="me-button" onClick={() => setIdentityOpen(true)}>
-          {me ? <><Avatar player={me} size={28} /><span>{me.name}</span></> : <span>Who are you?</span>}
+          {me ? <><Avatar player={me} size={28} /><span>{me.name}</span>{currentAbsence(absences, me.id) && <span title="You are marked as away today">🏖</span>}</> : <span>Who are you?</span>}
         </button>
       </header>
 

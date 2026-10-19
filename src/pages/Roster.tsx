@@ -7,9 +7,13 @@ import { DAY, startOfWeek } from '../time'
 import { useSchedule } from '../useSchedule'
 import { PlayerForm } from '../components/PlayerForm'
 import { Avatar, Modal, RoleIcon } from '../components/ui'
+import { AbsenceManager } from '../components/AbsenceManager'
+import { currentAbsence, dayKey, describeAbsence } from '../absence'
 
-export function Roster({ players, me, refreshPlayers }: AppContext) {
+export function Roster({ players, me, refreshPlayers, absences, refreshAbsences }: AppContext) {
   const [editing, setEditing] = useState<Player | 'new' | null>(null)
+  const [awayFor, setAwayFor] = useState<Player | null>(null)
+  const today = dayKey(new Date())
   const [status, setStatus] = useState('')
   const [weekStart] = useState(() => startOfWeek(new Date()).getTime())
   const { schedule } = useSchedule(weekStart, weekStart + 7 * DAY)
@@ -37,8 +41,12 @@ export function Roster({ players, me, refreshPlayers }: AppContext) {
       {status && <div className="banner error">{status}</div>}
 
       <div className="roster">
-        {players.map((player) => (
-          <article key={player.id} className={`member-card ${player.id === me?.id ? 'mine' : ''}`}>
+        {players.map((player) => {
+          const away = currentAbsence(absences, player.id)
+          const upcoming = absences.find((absence) => absence.playerId === player.id && absence.start > today)
+          return (
+          <article key={player.id} className={`member-card ${player.id === me?.id ? 'mine' : ''} ${away ? 'away' : ''}`}>
+            {away && <div className="away-ribbon" title={describeAbsence(away)}>{describeAbsence(away)}</div>}
             <div className="member-art" style={{ backgroundImage: `url(${centered(player.champion)})` }} />
             <div className="member-body">
               <div className="member-title">
@@ -59,12 +67,23 @@ export function Roster({ players, me, refreshPlayers }: AppContext) {
                 <div><dt>This week</dt><dd>{hoursThisWeek.get(player.id) ?? 0} h</dd></div>
                 <div><dt>All time</dt><dd>{player.totalSignups ?? 0} h</dd></div>
               </dl>
-              <button type="button" className="button small ghost" onClick={() => setEditing(player)}>Edit</button>
+              {upcoming && !away && <p className="upcoming-away">Planned: {describeAbsence(upcoming)}</p>}
+              <div className="member-actions">
+                <button type="button" className="button small ghost" onClick={() => setEditing(player)}>Edit</button>
+                <button type="button" className="button small ghost" onClick={() => setAwayFor(player)}>🏖 Away</button>
+              </div>
             </div>
           </article>
-        ))}
+          )
+        })}
         {players.length === 0 && <p className="muted">The barn is empty. Recruit the first cowbuilder!</p>}
       </div>
+
+      {awayFor && (
+        <Modal title={`${awayFor.name}: absences`} onClose={() => setAwayFor(null)}>
+          <AbsenceManager player={awayFor} absences={absences} onChanged={refreshAbsences} />
+        </Modal>
+      )}
 
       {editing && (
         <Modal title={editing === 'new' ? 'Recruit a cowbuilder' : `Edit ${editing.name}`} onClose={() => setEditing(null)}>

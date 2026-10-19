@@ -8,11 +8,13 @@ import { useSchedule } from '../useSchedule'
 import { PlayerForm } from '../components/PlayerForm'
 import { Avatar, Modal, RoleIcon } from '../components/ui'
 import { AbsenceManager } from '../components/AbsenceManager'
+import { CalendarFeed } from '../components/CalendarFeed'
 import { currentAbsence, dayKey, describeAbsence } from '../absence'
 
 export function Roster({ players, me, refreshPlayers, absences, refreshAbsences }: AppContext) {
   const [editing, setEditing] = useState<Player | 'new' | null>(null)
   const [awayFor, setAwayFor] = useState<Player | null>(null)
+  const [calendarFor, setCalendarFor] = useState<Player | null>(null)
   const today = dayKey(new Date())
   const [status, setStatus] = useState('')
   const [weekStart] = useState(() => startOfWeek(new Date()).getTime())
@@ -71,6 +73,7 @@ export function Roster({ players, me, refreshPlayers, absences, refreshAbsences 
               <div className="member-actions">
                 <button type="button" className="button small ghost" onClick={() => setEditing(player)}>Edit</button>
                 <button type="button" className="button small ghost" onClick={() => setAwayFor(player)}>🏖 Away</button>
+                <button type="button" className="button small ghost" onClick={() => setCalendarFor(player)}>📅 Calendar</button>
               </div>
             </div>
           </article>
@@ -78,6 +81,12 @@ export function Roster({ players, me, refreshPlayers, absences, refreshAbsences 
         })}
         {players.length === 0 && <p className="muted">The barn is empty. Recruit the first cowbuilder!</p>}
       </div>
+
+      {calendarFor && (
+        <Modal title={`${calendarFor.name}: calendar feed`} onClose={() => setCalendarFor(null)}>
+          <CalendarFeed player={calendarFor} />
+        </Modal>
+      )}
 
       {awayFor && (
         <Modal title={`${awayFor.name}: absences`} onClose={() => setAwayFor(null)}>

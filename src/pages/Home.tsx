@@ -9,6 +9,7 @@ import { candidatesOf, useSchedule } from '../useSchedule'
 import { SlotDetail } from '../components/SlotDetail'
 import { Avatar, Crest, Modal } from '../components/ui'
 import { AbsenceManager } from '../components/AbsenceManager'
+import { CalendarFeed } from '../components/CalendarFeed'
 
 const HERO_ROTATION = GALLERY.slice(0, 8)
 const timeAgo = (sqlUtc: string) => {
@@ -24,6 +25,7 @@ export function Home({ players, me, askIdentity, navigate, refreshPlayers, absen
   const [activity, setActivity] = useState<Activity[]>([])
   const [openSlot, setOpenSlot] = useState<number | null>(null)
   const [awayOpen, setAwayOpen] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const [from] = useState(() => currentSlot())
   const { schedule, bySlot, reload } = useSchedule(from, from + 14 * DAY)
   const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players])
@@ -67,7 +69,10 @@ export function Home({ players, me, askIdentity, navigate, refreshPlayers, absen
 
       <div className="home-grid">
         <section className="hextech-panel">
-          <h2>Locked sessions</h2>
+          <div className="panel-head">
+            <h2>Locked sessions</h2>
+            <button type="button" className="button small ghost" onClick={() => (me ? setCalendarOpen(true) : askIdentity())}>📅 Subscribe</button>
+          </div>
           {upcomingSessions.length === 0 && <p className="muted">Nothing locked in yet. Find a slot with enough cowbuilders and hit 🔒 Lock in.</p>}
           <ul className="session-list">
             {upcomingSessions.map((session) => (
@@ -187,6 +192,11 @@ export function Home({ players, me, askIdentity, navigate, refreshPlayers, absen
         </ol>
       </section>
 
+      {calendarOpen && me && (
+        <Modal title="Your calendar feed" onClose={() => setCalendarOpen(false)}>
+          <CalendarFeed player={me} />
+        </Modal>
+      )}
       {awayOpen && me && (
         <Modal title="When are you away?" onClose={() => setAwayOpen(false)}>
           <AbsenceManager player={me} absences={absences} onChanged={refreshAbsences} />

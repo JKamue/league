@@ -9,6 +9,7 @@ import { candidatesOf, useSchedule } from '../useSchedule'
 import { SlotDetail } from '../components/SlotDetail'
 import { ABSENCE_KINDS, awayOn, describeAbsence, isAway } from '../absence'
 import { AbsenceManager } from '../components/AbsenceManager'
+import { CalendarFeed } from '../components/CalendarFeed'
 import { Avatar, Crest, Modal } from '../components/ui'
 
 const HOURS_KEY = 'cowbuilders:hours'
@@ -38,6 +39,7 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers, absence
   const [filter, setFilter] = useState<Mode | 'any'>('any')
   const [toast, setToast] = useState('')
   const [awayOpen, setAwayOpen] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const paintRef = useRef<Paint | null>(null)
 
   const days = weekDays(weekStart)
@@ -140,6 +142,7 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers, absence
           <button type="button" className={`button small ${paintMode ? 'gold' : 'ghost'}`} aria-pressed={paintMode} onClick={() => setPaintMode(!paintMode)}>🖌 Paint availability</button>
           <button type="button" className="button small ghost" onClick={() => void copyWeek()}>⟳ Copy my last week</button>
           <button type="button" className="button small ghost" onClick={() => (me ? setAwayOpen(true) : askIdentity())}>🏖 I'm away</button>
+          <button type="button" className="button small ghost" onClick={() => (me ? setCalendarOpen(true) : askIdentity())}>📅 My calendar</button>
           <button type="button" className="button small ghost" onClick={() => setShowAll(!showAll)}>{showAll ? 'Evenings only' : 'All day'}</button>
           <select value={filter} onChange={(event) => setFilter(event.target.value as Mode | 'any')} aria-label="Highlight mode">
             <option value="any">Highlight: any mode</option>
@@ -182,6 +185,11 @@ export function SchedulePage({ players, me, askIdentity, refreshPlayers, absence
           slot={openSlot} signups={openSignups} sessions={sessionsBySlot.get(openSlot) ?? []} players={players} me={me} absences={absences}
           askIdentity={askIdentity} onClose={() => setOpenSlot(null)} onChanged={async () => { await reload(); void refreshPlayers() }}
         />
+      )}
+      {calendarOpen && me && (
+        <Modal title="Your calendar feed" onClose={() => setCalendarOpen(false)}>
+          <CalendarFeed player={me} />
+        </Modal>
       )}
       {awayOpen && me && (
         <Modal title="When are you away?" onClose={() => setAwayOpen(false)}>

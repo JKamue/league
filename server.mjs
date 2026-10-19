@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, existsSync, statSync } from 'node:fs'
 import { join, normalize, extname, resolve } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { DatabaseSync } from 'node:sqlite'
+import { randomBytes } from 'node:crypto'
 
 const port = Number(process.env.PORT ?? 3000)
 const dataDir = process.env.DATA_DIR ?? './data'
@@ -48,6 +49,11 @@ db.exec(`PRAGMA journal_mode = WAL;
 // Schema version for future additive migrations (check user_version, then ALTER TABLE).
 // v2: absences table (created above by CREATE TABLE IF NOT EXISTS, nothing to alter).
 if (db.prepare('PRAGMA user_version').get().user_version < 2) db.exec('PRAGMA user_version = 2')
+// v3: secret token per player for their subscribable calendar feed.
+const playerColumns = new Set(db.prepare('PRAGMA table_info(players)').all().map((column) => column.name))
+if (!playerColumns.has('calendar_token')) db.exec('ALTER TABLE players ADD COLUMN calendar_token TEXT')
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS players_calendar_token ON players(calendar_token)')
+if (db.prepare('PRAGMA user_version').get().user_version < 3) db.exec('PRAGMA user_version = 3')
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status }
@@ -172,6 +178,17 @@ const routes = [
     db.prepare('DELETE FROM players WHERE id = ?').run(Number(id))
     return [200, { deleted: true }]
   }],
+  // Returns the player's calendar token, creating it on first use; { regenerate: true } invalidates the old link.
+  ['POST', /^\/api\/players\/(\d+)\/calendar$/, async (req, [id]) => {
+    requirePlayer(id)
+    const payload = await readBody(req)
+    let token = db.prepare('SELECT calendar_token AS token FROM players WHERE id = ?').get(Number(id)).token
+    if (!token || payload.regenerate === true) {
+      token = randomBytes(18).toString('base64url')
+      db.prepare('UPDATE players SET calendar_token = ? WHERE id = ?').run(token, Number(id))
+    }
+    return [200, { token, path: `/cal/${token}.ics` }]
+  }],
   ['GET', /^\/api\/schedule$/, (_req, _params, url) => {
     const { from, to } = rangeParams(url)
     return [200, { signups: listSignups(from, to), sessions: listSessions(from, to) }]
@@ -267,6 +284,71 @@ const loadStatic = (path) => {
   fileCache.set(path, entry)
   return entry
 }
+// ---------- personal calendar feed (/cal/<token>.ics) ----------
+// Served outside /api so the reverse proxy can exempt it from basic auth: Google Calendar fetches it from its own servers.
+const CALENDAR_TZ = process.env.CALENDAR_TZ ?? 'Europe/Berlin'
+const icsStamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+const icsEscape = (value) => String(value).replace(/[\\,;]/g, (char) => `\\${char}`).replace(/\n/g, '\\n')
+// RFC 5545 wants lines of at most 75 octets, continued with a leading space.
+const icsFold = (line) => {
+  const parts = []
+  let current = ''
+  for (const char of line) {
+    if (Buffer.byteLength(current + char) > (parts.length ? 74 : 75)) { parts.push(current); current = '' }
+    current += char
+  }
+  return [...parts, current].join('\r\n ')
+}
+const localHour = (ms) => new Date(ms).toLocaleTimeString('de-DE', { timeZone: CALENDAR_TZ, hour: '2-digit', minute: '2-digit' })
+const calendarFeed = (player, origin) => {
+  const from = Date.now() - 30 * 24 * HOUR
+  const to = Date.now() + 120 * 24 * HOUR
+  const names = new Map(db.prepare('SELECT id, name FROM players').all().map((row) => [row.id, row.name]))
+  const all = listSignups(from, to)
+  const lobby = new Map()
+  all.forEach((signup) => lobby.set(signup.slot, [...(lobby.get(signup.slot) ?? []), signup.playerId]))
+  const mySlots = all.filter((signup) => signup.playerId === player.id).map((signup) => signup.slot)
+  // Consecutive hours become one event; title and description follow whoever else joined.
+  const blocks = []
+  mySlots.forEach((slot) => {
+    const last = blocks.at(-1)
+    if (last && last.at(-1) + HOUR === slot) last.push(slot); else blocks.push([slot])
+  })
+  const now = icsStamp(Date.now())
+  const link = `${origin}/schedule`
+  const events = blocks.map((block) => {
+    const others = [...new Set(block.flatMap((slot) => lobby.get(slot) ?? []))].filter((id) => id !== player.id).map((id) => names.get(id) ?? '?')
+    const peak = Math.max(...block.map((slot) => (lobby.get(slot) ?? []).length))
+    const lines = block.map((slot) => `${localHour(slot)}: ${(lobby.get(slot) ?? []).length}/${MAX_PER_SLOT} ${(lobby.get(slot) ?? []).map((id) => names.get(id) ?? '?').join(', ')}`)
+    return [
+      'BEGIN:VEVENT', `UID:cowbuilders-${player.id}-${block[0]}@cowbuilders`, `DTSTAMP:${now}`,
+      `DTSTART:${icsStamp(block[0])}`, `DTEND:${icsStamp(block.at(-1) + HOUR)}`,
+      `SUMMARY:${icsEscape(others.length ? `🐄 LoL with ${others.join(', ')} · ${peak}/${MAX_PER_SLOT}` : '🐄 LoL (nobody else yet)')}`,
+      `DESCRIPTION:${icsEscape(`${lines.join('\n')}\n\n${link}?slot=${block[0]}`)}`, `URL:${link}?slot=${block[0]}`, 'END:VEVENT',
+    ]
+  })
+  const sessions = db.prepare('SELECT id, slot, mode, title FROM sessions WHERE slot >= ? AND slot < ?').all(from, to).filter((session) => mySlots.includes(session.slot))
+  sessions.forEach((session) => events.push([
+    'BEGIN:VEVENT', `UID:cowbuilders-session-${session.id}-${player.id}@cowbuilders`, `DTSTAMP:${now}`,
+    `DTSTART:${icsStamp(session.slot)}`, `DTEND:${icsStamp(session.slot + 2 * HOUR)}`,
+    `SUMMARY:${icsEscape(`🔒 ${session.title || session.mode.toUpperCase()} · Cowbuilders`)}`,
+    `DESCRIPTION:${icsEscape(`${session.mode.toUpperCase()} with ${(lobby.get(session.slot) ?? []).map((id) => names.get(id) ?? '?').join(', ')}\n${link}?slot=${session.slot}`)}`,
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Cowbuilders session', 'TRIGGER:-PT15M', 'END:VALARM', 'END:VEVENT',
+  ]))
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Cowbuilders//HQ//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    `X-WR-CALNAME:${icsEscape(`Cowbuilders · ${player.name}`)}`, 'X-PUBLISHED-TTL:PT1H', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+    ...events.flat(), 'END:VCALENDAR'].map(icsFold).join('\r\n') + '\r\n'
+}
+const serveCalendar = (req, res, url) => {
+  const token = url.pathname.match(/^\/cal\/([A-Za-z0-9_-]{16,64})\.ics$/)?.[1]
+  const player = token && db.prepare('SELECT id, name FROM players WHERE calendar_token = ?').get(token)
+  if (!player) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Unknown calendar.') }
+  const proto = String(req.headers['x-forwarded-proto'] ?? 'http').split(',')[0]
+  const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? 'localhost').split(',')[0]
+  res.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-cache', 'Content-Disposition': 'inline; filename="cowbuilders.ics"' })
+  res.end(calendarFeed(player, `${proto}://${host}`))
+}
+
 const serveStatic = (req, res, url) => {
   let path = normalize(join(staticDir, decodeURIComponent(url.pathname)))
   if (!path.startsWith(staticDir) || !existsSync(path) || !statSync(path).isFile()) path = join(staticDir, 'index.html')
@@ -287,6 +369,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost')
   try {
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url)
+    if (url.pathname.startsWith('/cal/')) return serveCalendar(req, res, url)
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Method not allowed.' })
     serveStatic(req, res, url)
   } catch (error) {

@@ -77,6 +77,26 @@ test('absences are validated, listed by end date and removable', async () => {
   assert.equal((await call('DELETE', `/api/absences/${created.body.id}`)).status, 200)
 })
 
+test('calendar feed is served by secret token and can be rotated', async () => {
+  const playerId = (await call('POST', '/api/players', { name: 'Subscriber', roles: ['mid'] })).body.id
+  const friend = (await call('POST', '/api/players', { name: 'Friend, the; Second', roles: ['top'] })).body.id
+  const slot = nextHour(30)
+  await call('PUT', '/api/signups', { playerId, slots: [slot, slot + 3_600_000, slot + 3 * 3_600_000] })
+  await call('PUT', '/api/signups', { playerId: friend, slots: [slot] })
+  await call('POST', '/api/sessions', { slot, mode: 'flex', title: 'Flex night' })
+  const { token, path } = (await call('POST', `/api/players/${playerId}/calendar`, {})).body
+  assert.equal((await call('POST', `/api/players/${playerId}/calendar`, {})).body.token, token)
+  const feed = await fetch(base + path)
+  assert.equal(feed.headers.get('content-type'), 'text/calendar; charset=utf-8')
+  const body = await feed.text()
+  assert.equal(body.match(/BEGIN:VEVENT/g).length, 3) // two blocks of hours + one locked session
+  assert.match(body, /Friend\\, the\\; Second/)
+  assert.ok(body.split('\r\n').every((line) => Buffer.byteLength(line) <= 75))
+  const rotated = (await call('POST', `/api/players/${playerId}/calendar`, { regenerate: true })).body
+  assert.notEqual(rotated.token, token)
+  assert.equal((await fetch(base + path)).status, 404)
+})
+
 test('the frontend fallback answers unknown paths', async () => {
   const response = await fetch(`${base}/schedule`)
   assert.ok([200, 404].includes(response.status))

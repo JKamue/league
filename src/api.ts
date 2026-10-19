@@ -34,6 +34,7 @@ export const api = {
   leave: (playerId: number, slots: number[]) => request<{ removed: number }>('/api/signups', { method: 'DELETE', body: { playerId, slots } }),
   lockSession: (body: { slot: number; mode: Mode; title: string; createdBy: number | null }) => request<Session>('/api/sessions', { method: 'POST', body }),
   cancelSession: (id: number) => request<{ deleted: true }>(`/api/sessions/${id}`, { method: 'DELETE' }),
+  calendar: (playerId: number, regenerate = false) => request<{ token: string; path: string }>(`/api/players/${playerId}/calendar`, { method: 'POST', body: { regenerate } }),
   absences: (since: string) => request<Absence[]>(`/api/absences?since=${since}`),
   addAbsence: (body: { playerId: number; start: string; end: string; kind: AbsenceKind; note: string }) => request<Absence>('/api/absences', { method: 'POST', body }),
   removeAbsence: (id: number) => request<{ deleted: true }>(`/api/absences/${id}`, { method: 'DELETE' }),

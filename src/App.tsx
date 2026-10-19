@@ -5,6 +5,7 @@ import { currentAbsence, dayKey } from './absence'
 import { addDays } from './time'
 import { Avatar, Crest, Modal } from './components/ui'
 import { PlayerForm } from './components/PlayerForm'
+import { CalendarFeed } from './components/CalendarFeed'
 import { Home } from './pages/Home'
 import { SchedulePage } from './pages/Schedule'
 import { Roster } from './pages/Roster'
@@ -117,6 +118,9 @@ export default function App() {
 
 function IdentityPicker({ players, meId, onPick, onCreated }: { players: Player[]; meId: number | null; onPick: (id: number | null) => void; onCreated: (player: Player) => Promise<void> }) {
   const [creating, setCreating] = useState(players.length === 0)
+  const [showCalendar, setShowCalendar] = useState(false)
+  const me = players.find((player) => player.id === meId)
+  if (showCalendar && me) return <><CalendarFeed player={me} /><div className="actions"><button type="button" className="button ghost" onClick={() => setShowCalendar(false)}>Back</button></div></>
   if (creating) return <PlayerForm onSaved={onCreated} onCancel={players.length ? () => setCreating(false) : undefined} submitLabel="Join the herd" />
   return (
     <div className="identity">
@@ -131,6 +135,7 @@ function IdentityPicker({ players, meId, onPick, onCreated }: { players: Player[
       </div>
       <div className="actions">
         <button type="button" className="button ghost" onClick={() => setCreating(true)}>+ I'm new here</button>
+        {me && <button type="button" className="button ghost" onClick={() => setShowCalendar(true)}>📅 My calendar</button>}
         {meId && <button type="button" className="button ghost" onClick={() => onPick(null)}>Log out</button>}
       </div>
     </div>

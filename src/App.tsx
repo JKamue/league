@@ -8,10 +8,11 @@ import { PlayerForm } from './components/PlayerForm'
 import { Home } from './pages/Home'
 import { SchedulePage } from './pages/Schedule'
 import { Roster } from './pages/Roster'
+import { AramCodex } from './pages/AramCodex'
 
-export type Page = 'home' | 'schedule' | 'roster'
-const PATHS: Record<Page, string> = { home: '/', schedule: '/schedule', roster: '/roster' }
-const pageFromPath = (path: string): Page => (path.startsWith('/schedule') ? 'schedule' : path.startsWith('/roster') ? 'roster' : 'home')
+export type Page = 'home' | 'schedule' | 'roster' | 'codex'
+const PATHS: Record<Page, string> = { home: '/', schedule: '/schedule', roster: '/roster', codex: '/aram-kodex' }
+const pageFromPath = (path: string): Page => (path.startsWith('/schedule') ? 'schedule' : path.startsWith('/roster') ? 'roster' : path.startsWith('/aram-kodex') ? 'codex' : 'home')
 const ME_KEY = 'cowbuilders:me'
 const readMe = () => { try { return Number(localStorage.getItem(ME_KEY)) || null } catch { return null } }
 
@@ -79,6 +80,9 @@ export default function App() {
             </a>
           ))}
         </nav>
+        <a href={PATHS.codex} className={`codex-link ${page === 'codex' ? 'active' : ''}`} onClick={(event) => { event.preventDefault(); navigate('codex') }}>
+          <span aria-hidden="true">⚖</span> ARAM-Kodex
+        </a>
         <button type="button" className="me-button" onClick={() => setIdentityOpen(true)}>
           {me ? <><Avatar player={me} size={28} /><span>{me.name}</span>{currentAbsence(absences, me.id) && <span title="You are marked as away today">🏖</span>}</> : <span>Who are you?</span>}
         </button>
@@ -90,6 +94,7 @@ export default function App() {
         {page === 'home' && <Home {...context} />}
         {page === 'schedule' && <SchedulePage {...context} />}
         {page === 'roster' && <Roster {...context} />}
+        {page === 'codex' && <AramCodex />}
       </main>
 
       <footer className="footer">

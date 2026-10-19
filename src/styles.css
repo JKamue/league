@@ -327,3 +327,53 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--blue-
 .absence-list li { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem; border: 1px solid var(--line); }
 .form-row.even { grid-template-columns: 1fr 1fr; }
 input[type='date'] { color-scheme: dark; }
+
+/* ---------- ARAM codex ---------- */
+.codex-link {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-family: var(--display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.9rem; text-decoration: none; white-space: nowrap;
+  padding: 0.45rem 1.1rem; color: #1a1205; border: 1px solid #fff3c4;
+  background: linear-gradient(180deg, #fff3c4 0%, var(--gold-2) 45%, var(--gold-3) 55%, var(--gold-4) 100%);
+  box-shadow: 0 0 18px rgba(200, 155, 60, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%);
+  animation: codex-glow 3s ease-in-out infinite;
+}
+.codex-link:hover, .codex-link.active { filter: brightness(1.15); }
+@keyframes codex-glow { 50% { box-shadow: 0 0 28px rgba(240, 200, 100, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.6); filter: brightness(1.08); } }
+
+.codex-page { padding: 3rem 0 1rem; position: relative; }
+.codex-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: radial-gradient(ellipse at center, rgba(1, 10, 19, 0.55), var(--bg) 75%), var(--backdrop) center 20% / cover no-repeat; }
+.codex {
+  max-width: 820px; margin: 0 auto; padding: clamp(1.5rem, 5vw, 3.5rem); position: relative;
+  background: radial-gradient(ellipse at top, rgba(60, 45, 15, 0.92), rgba(12, 9, 3, 0.95) 70%);
+  border: 2px solid var(--gold-3);
+  box-shadow: 0 0 0 6px rgba(1, 10, 19, 0.9), 0 0 0 8px var(--gold-4), 0 0 60px rgba(200, 155, 60, 0.35), 0 30px 80px #000, inset 0 0 80px rgba(0, 0, 0, 0.6);
+}
+.codex::before, .codex::after { content: '◆'; position: absolute; top: -0.85rem; color: var(--gold-2); font-size: 1.4rem; text-shadow: 0 0 10px var(--gold-3); }
+.codex::before { left: -0.6rem; } .codex::after { right: -0.6rem; }
+.codex-head { text-align: center; display: grid; justify-items: center; gap: 0.3rem; }
+.codex-head .crest { filter: drop-shadow(0 0 20px rgba(200, 155, 60, 0.6)); }
+.codex-title { font-size: clamp(1.7rem, 5.5vw, 3rem); margin: 0; background: linear-gradient(180deg, #fff8e6 10%, var(--gold-2) 55%, var(--gold-4)); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 3px 8px #000); }
+.codex-rule { display: flex; align-items: center; gap: 0.8rem; width: 100%; color: var(--gold-3); margin: 0.8rem 0; }
+.codex-rule::before, .codex-rule::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-3), transparent); }
+.codex-clauses { list-style: none; margin: 1.5rem 0 0; padding: 0; display: grid; gap: 1.6rem; }
+.codex-clause { display: grid; grid-template-columns: 4.2rem 1fr; gap: 1.1rem; align-items: start; }
+.codex-mark {
+  display: grid; place-items: center; width: 4.2rem; height: 4.2rem; border-radius: 50%; font-family: var(--display); font-weight: 800; font-size: 1.35rem; color: #1a1205;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, var(--gold-2) 45%, var(--gold-4)); border: 2px solid #fff3c4; box-shadow: 0 0 16px rgba(200, 155, 60, 0.5), 0 4px 10px #000;
+}
+.codex-text { margin: 0.55rem 0 0; font-family: var(--display); font-size: clamp(1.05rem, 2.4vw, 1.3rem); font-weight: 600; color: var(--gold-1); line-height: 1.4; }
+.codex-sub { list-style: none; margin: 0.7rem 0 0; padding: 0 0 0 1rem; border-left: 2px solid var(--gold-4); display: grid; gap: 0.5rem; }
+.codex-sub li { display: grid; grid-template-columns: 3.4rem 1fr; gap: 0.6rem; align-items: baseline; color: #e6d8b8; }
+.codex-submark { font-family: var(--display); font-weight: 800; color: var(--gold-2); }
+.codex-foot { text-align: center; margin-top: 2rem; }
+.codex-foot p { margin: 0; font-style: italic; color: var(--gold-2); font-size: 0.9rem; }
+
+@media (max-width: 1100px) { .codex-link { position: static; transform: none; } }
+@media (max-width: 760px) {
+  .codex-link { order: 2; font-size: 0.75rem; padding: 0.35rem 0.9rem; }
+  .codex-clause { grid-template-columns: 3rem 1fr; gap: 0.8rem; }
+  .codex-mark { width: 3rem; height: 3rem; font-size: 1rem; }
+  .codex-text { margin-top: 0.3rem; }
+}
+@media (prefers-reduced-motion: reduce) { .codex-link { animation: none; } }
